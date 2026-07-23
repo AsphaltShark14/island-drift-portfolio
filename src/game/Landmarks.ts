@@ -1,14 +1,13 @@
 import * as THREE from "three";
 import { LANDMARKS, type LandmarkData, type LandmarkKind } from "./PortfolioData";
-import type { AABB } from "./World";
+import type { Anchor } from "./World";
 
 // --- Themed building builders -------------------------------------------
-// Each returns the building group plus a solid collider footprint. Origin
-// is the ground centre; +Z faces "into" the ring road.
+// Each builds a themed building around the local origin, with its front
+// (+Z) facing the road; the Landmark places/rotates it at a track anchor.
 
 interface Built {
   group: THREE.Group;
-  collider: AABB;
 }
 
 // Daytime: mostly solid colour with just a hint of emissive so signage
@@ -50,7 +49,7 @@ function buildCafe(data: LandmarkData): Built {
   sign.position.set(0, 3.4, d / 2 + 0.03);
   g.add(sign);
 
-  return { group: g, collider: inset(data, 0.4) };
+  return { group: g };
 }
 
 function buildArcade(data: LandmarkData): Built {
@@ -72,7 +71,7 @@ function buildArcade(data: LandmarkData): Built {
     side.rotation.y = Math.PI / 2;
     g.add(side);
   }
-  return { group: g, collider: inset(data, 0.3) };
+  return { group: g };
 }
 
 function buildWorkshop(data: LandmarkData): Built {
@@ -108,7 +107,7 @@ function buildWorkshop(data: LandmarkData): Built {
   const sign = marquee(data.color, 2.6, 0.7);
   sign.position.set(0, 3.4, d / 2 + 0.03);
   g.add(sign);
-  return { group: g, collider: inset(data, 0.4) };
+  return { group: g };
 }
 
 function buildGasStation(data: LandmarkData): Built {
@@ -155,17 +154,7 @@ function buildGasStation(data: LandmarkData): Built {
   sign.position.set(0, 4.4, -d / 2 + shopD);
   g.add(sign);
 
-  // Collider only around the shop, so the car can pull under the canopy.
-  const cz = -d / 2 + shopD / 2;
-  return {
-    group: g,
-    collider: {
-      minX: data.position[0] - shopW / 2,
-      maxX: data.position[0] + shopW / 2,
-      minZ: data.position[1] + cz - shopD / 2,
-      maxZ: data.position[1] + cz + shopD / 2,
-    },
-  };
+  return { group: g };
 }
 
 function buildOffice(data: LandmarkData): Built {
@@ -191,17 +180,7 @@ function buildOffice(data: LandmarkData): Built {
   const crown = marquee(data.color, w * 0.9, 0.6);
   crown.position.set(0, h - 0.6, d / 2 + 0.03);
   g.add(crown);
-  return { group: g, collider: inset(data, 0.3) };
-}
-
-function inset(data: LandmarkData, margin: number): AABB {
-  const [w, d] = data.footprint;
-  return {
-    minX: data.position[0] - w / 2 + margin,
-    maxX: data.position[0] + w / 2 - margin,
-    minZ: data.position[1] - d / 2 + margin,
-    maxZ: data.position[1] + d / 2 - margin,
-  };
+  return { group: g };
 }
 
 const BUILDERS: Record<LandmarkKind, (d: LandmarkData) => Built> = {
@@ -217,43 +196,40 @@ export class Landmark {
   readonly data: LandmarkData;
   readonly group: THREE.Group;
   readonly position: THREE.Vector3;
-  readonly collider: AABB;
   readonly triggerRadius: number;
 
   private ring: THREE.Mesh;
   private pin: THREE.Group;
 
-  constructor(data: LandmarkData) {
+  constructor(data: LandmarkData, anchor: Anchor) {
     this.data = data;
-    this.position = new THREE.Vector3(data.position[0], 0, data.position[1]);
+    this.position = new THREE.Vector3(anchor.x, 0, anchor.z);
 
     const built = BUILDERS[data.kind](data);
-    this.collider = built.collider;
     this.group = new THREE.Group();
     this.group.position.copy(this.position);
+    this.group.rotation.y = anchor.rot; // face the road
     this.group.add(built.group);
 
-    const radius = Math.max(data.footprint[0], data.footprint[1]) / 2 + 2.8;
-    this.triggerRadius = radius;
+    // Trigger fires while passing on the road; ring is a tighter visual cue.
+    const half = Math.max(data.footprint[0], data.footprint[1]) / 2;
+    this.triggerRadius = half + 6.5;
+    const ringRadius = half + 1.6;
 
-    // Glowing ground ring marks the trigger zone.
     this.ring = new THREE.Mesh(
-      new THREE.RingGeometry(radius - 0.25, radius, 40),
+      new THREE.RingGeometry(ringRadius - 0.25, ringRadius, 44),
       new THREE.MeshBasicMaterial({ color: data.color, transparent: true, opacity: 0.5, side: THREE.DoubleSide }),
     );
     this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.y = 0.03;
+    this.ring.position.y = 0.05;
     this.group.add(this.ring);
 
-    // Floating rotating pin above the building.
+    // Floating rotating pin above the building — the wayfinding beacon.
     this.pin = new THREE.Group();
-    const cone = new THREE.Mesh(
-      new THREE.ConeGeometry(0.5, 1, 4),
-      emissive(data.color, 0.5),
-    );
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.2, 4), emissive(data.color, 0.5));
     cone.rotation.x = Math.PI; // point down
     this.pin.add(cone);
-    const pinHeight = data.kind === "office" ? 13 : data.kind === "arcade" ? 10 : 6;
+    const pinHeight = data.kind === "office" ? 9 : data.kind === "arcade" ? 8 : 6;
     this.pin.position.y = pinHeight;
     this.group.add(this.pin);
   }
@@ -264,19 +240,16 @@ export class Landmark {
 
   update(time: number): void {
     this.pin.rotation.y = time * 1.2;
-    this.pin.position.y += Math.sin(time * 2 + this.position.x) * 0.004;
-    const pulse = 1 + Math.sin(time * 2.4) * 0.04;
+    const pulse = 1 + Math.sin(time * 2.4) * 0.05;
     this.ring.scale.setScalar(pulse);
   }
 }
 
 export class LandmarkManager {
   readonly landmarks: Landmark[];
-  readonly colliders: AABB[];
 
-  constructor(scene: THREE.Scene) {
-    this.landmarks = LANDMARKS.map((data) => new Landmark(data));
-    this.colliders = this.landmarks.map((l) => l.collider);
+  constructor(scene: THREE.Scene, anchors: Anchor[]) {
+    this.landmarks = LANDMARKS.map((data, i) => new Landmark(data, anchors[i % anchors.length]));
     for (const landmark of this.landmarks) scene.add(landmark.group);
   }
 

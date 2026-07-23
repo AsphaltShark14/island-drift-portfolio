@@ -4,7 +4,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { Input } from "./Input";
 import { Car } from "./Car";
-import { createWorld, type WorldResult, type AABB } from "./World";
+import { createWorld, type WorldResult, type AABB, type Wall } from "./World";
 import { LandmarkManager } from "./Landmarks";
 import { UIOverlay } from "./UIOverlay";
 
@@ -26,6 +26,7 @@ export class Game {
   private landmarks: LandmarkManager;
   private ui = new UIOverlay();
   private colliders: AABB[];
+  private walls: Wall[];
   private cameraTarget = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -46,12 +47,15 @@ export class Game {
     sun.position.set(18, 30, 12);
     this.scene.add(sun);
 
-    // World first (roads, buildings), then landmarks add their colliders.
+    // Build the circuit, then anchor landmarks to roadside points on it.
     this.world = createWorld(this.scene);
-    this.landmarks = new LandmarkManager(this.scene);
-    this.colliders = [...this.world.colliders, ...this.landmarks.colliders];
+    this.landmarks = new LandmarkManager(this.scene, this.world.anchors);
+    this.colliders = this.world.colliders;
+    this.walls = this.world.walls;
 
     this.car = new Car(this.scene);
+    this.car.position.set(this.world.spawn.x, 0, this.world.spawn.z);
+    this.car.heading = this.world.spawn.heading;
     this.cameraTarget.copy(this.car.position);
     this.updateCameraPosition();
 
@@ -84,12 +88,15 @@ export class Game {
   carZ(): number {
     return this.car.position.z;
   }
+  debugAnchors(): Array<{ x: number; z: number; rot: number }> {
+    return this.world.anchors;
+  }
 
   private tick(): void {
     const dt = Math.min(this.clock.getDelta(), 0.1);
     const time = this.clock.elapsedTime;
 
-    this.car.update(dt, this.input.getState(), this.colliders);
+    this.car.update(dt, this.input.getState(), this.colliders, this.walls);
     this.world.update(time);
 
     this.cameraTarget.lerp(this.car.position, 1 - Math.pow(0.0015, dt));

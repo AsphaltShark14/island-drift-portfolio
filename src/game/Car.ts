@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { InputState } from "./Input";
-import type { AABB } from "./World";
+import type { AABB, Wall } from "./World";
 
 // --- Tuning -------------------------------------------------------------
 const MAX_SPEED = 20;
@@ -65,7 +65,7 @@ export class Car {
     this.velocity.set(0, 0);
   }
 
-  update(dt: number, input: InputState, colliders: AABB[]): void {
+  update(dt: number, input: InputState, colliders: AABB[], walls: Wall[]): void {
     // Local axes from heading (matches sin/cos forward convention).
     this.forward.set(Math.sin(this.heading), Math.cos(this.heading));
     this.right.set(Math.cos(this.heading), -Math.sin(this.heading));
@@ -102,10 +102,11 @@ export class Car {
       .multiplyScalar(vLong)
       .addScaledVector(this.right, vLat);
 
-    // Integrate + resolve collisions against buildings.
+    // Integrate + resolve collisions against buildings and barriers.
     this.position.x += this.velocity.x * dt;
     this.position.z += this.velocity.y * dt;
     this.resolveCollisions(colliders);
+    this.resolveWalls(walls);
 
     // --- Visuals ---
     this.mesh.position.copy(this.position);
@@ -154,6 +155,51 @@ export class Car {
       this.position.z += nz * push;
 
       // Kill the velocity component going into the wall (slide along it).
+      const into = this.velocity.x * nx + this.velocity.y * nz;
+      if (into < 0) {
+        this.velocity.x -= into * nx;
+        this.velocity.y -= into * nz;
+      }
+    }
+  }
+
+  // --- Barrier collision: car circle vs wall segments --------------------
+  private static readonly WALL_HALF = 0.25;
+  private resolveWalls(walls: Wall[]): void {
+    const reach = CAR_RADIUS + Car.WALL_HALF;
+    for (const wall of walls) {
+      const ax = wall.x1;
+      const az = wall.z1;
+      const bx = wall.x2 - ax;
+      const bz = wall.z2 - az;
+      const lenSq = bx * bx + bz * bz;
+      if (lenSq < 1e-6) continue;
+      // Closest point on the segment to the car centre.
+      let t = ((this.position.x - ax) * bx + (this.position.z - az) * bz) / lenSq;
+      t = THREE.MathUtils.clamp(t, 0, 1);
+      const cx = ax + bx * t;
+      const cz = az + bz * t;
+      const dx = this.position.x - cx;
+      const dz = this.position.z - cz;
+      const distSq = dx * dx + dz * dz;
+      if (distSq >= reach * reach) continue;
+
+      let nx: number;
+      let nz: number;
+      let dist: number;
+      if (distSq > 1e-6) {
+        dist = Math.sqrt(distSq);
+        nx = dx / dist;
+        nz = dz / dist;
+      } else {
+        // On the line — push along the segment normal.
+        const inv = 1 / Math.sqrt(lenSq);
+        nx = -bz * inv;
+        nz = bx * inv;
+        dist = 0;
+      }
+      this.position.x += nx * (reach - dist);
+      this.position.z += nz * (reach - dist);
       const into = this.velocity.x * nx + this.velocity.y * nz;
       if (into < 0) {
         this.velocity.x -= into * nx;
