@@ -3,18 +3,24 @@ export interface InputState {
   backward: boolean;
   left: boolean;
   right: boolean;
+  handbrake: boolean;
 }
 
 const FORWARD_KEYS = new Set(["KeyW", "ArrowUp"]);
 const BACKWARD_KEYS = new Set(["KeyS", "ArrowDown"]);
 const LEFT_KEYS = new Set(["KeyA", "ArrowLeft"]);
 const RIGHT_KEYS = new Set(["KeyD", "ArrowRight"]);
+const HANDBRAKE_KEYS = new Set(["Space", "ShiftLeft", "ShiftRight"]);
 
 export class Input {
   private keys = new Set<string>();
 
   constructor() {
-    window.addEventListener("keydown", (e) => this.keys.add(e.code));
+    window.addEventListener("keydown", (e) => {
+      // Space would otherwise scroll the page / trigger buttons.
+      if (HANDBRAKE_KEYS.has(e.code)) e.preventDefault();
+      this.keys.add(e.code);
+    });
     window.addEventListener("keyup", (e) => this.keys.delete(e.code));
     window.addEventListener("blur", () => this.keys.clear());
   }
@@ -25,6 +31,7 @@ export class Input {
       backward: this.any(BACKWARD_KEYS),
       left: this.any(LEFT_KEYS),
       right: this.any(RIGHT_KEYS),
+      handbrake: this.any(HANDBRAKE_KEYS),
     };
   }
 
