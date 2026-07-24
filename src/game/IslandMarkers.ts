@@ -11,59 +11,16 @@ interface IslandMarker {
   pin: THREE.Group;
 }
 
-/** Scan the island for drivable ground and spread N points across it. */
-function pickSpreadPoints(
-  sample: (x: number, z: number) => number | null,
-  radius: number,
-  count: number,
-): THREE.Vector3[] {
-  const valid: THREE.Vector3[] = [];
-  const step = Math.max(2, (radius * 2) / 60);
-  for (let x = -radius; x <= radius; x += step) {
-    for (let z = -radius; z <= radius; z += step) {
-      const y = sample(x, z);
-      if (y !== null && y > -1 && y < 0.9) valid.push(new THREE.Vector3(x, y, z));
-    }
-  }
-  if (valid.length === 0) return [];
-
-  // Farthest-point sampling for an even spread across the islands.
-  const chosen: THREE.Vector3[] = [];
-  let seed = valid[0];
-  for (const p of valid) if (p.x < seed.x) seed = p; // start at the far end
-  chosen.push(seed);
-  while (chosen.length < count && chosen.length < valid.length) {
-    let best: THREE.Vector3 | null = null;
-    let bestDist = -1;
-    for (const p of valid) {
-      let nearest = Infinity;
-      for (const c of chosen) nearest = Math.min(nearest, p.distanceToSquared(c));
-      if (nearest > bestDist) {
-        bestDist = nearest;
-        best = p;
-      }
-    }
-    if (!best) break;
-    chosen.push(best);
-  }
-  return chosen;
-}
-
 export class IslandMarkers {
   private markers: IslandMarker[] = [];
 
-  constructor(
-    scene: THREE.Scene,
-    sample: (x: number, z: number) => number | null,
-    radius: number,
-  ) {
-    const points = pickSpreadPoints(sample, radius, LANDMARKS.length);
-    LANDMARKS.forEach((data, i) => {
-      const p = points[i] ?? points[points.length - 1];
-      if (!p) return;
+  constructor(scene: THREE.Scene, sample: (x: number, z: number) => number | null) {
+    for (const data of LANDMARKS) {
+      const [x, z] = data.position;
+      const y = sample(x, z) ?? 0;
 
       const group = new THREE.Group();
-      group.position.set(p.x, p.y, p.z);
+      group.position.set(x, y, z);
 
       const ring = new THREE.Mesh(
         new THREE.RingGeometry(2.6, 3, 44),
@@ -90,8 +47,8 @@ export class IslandMarkers {
       group.add(pin);
 
       scene.add(group);
-      this.markers.push({ data, position: new THREE.Vector3(p.x, p.y, p.z), ring, pin });
-    });
+      this.markers.push({ data, position: new THREE.Vector3(x, y, z), ring, pin });
+    }
   }
 
   update(time: number, carPosition: THREE.Vector3): { data: LandmarkData } | null {

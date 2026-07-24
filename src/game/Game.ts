@@ -7,6 +7,7 @@ import { Car } from "./Car";
 import { createWorld, type WorldResult, type AABB, type Wall } from "./World";
 import { createIslandWorld, type IslandWorld } from "./IslandWorld";
 import { LandmarkManager } from "./Landmarks";
+import { IslandMarkers } from "./IslandMarkers";
 import { UIOverlay } from "./UIOverlay";
 import type { LandmarkData } from "./PortfolioData";
 
@@ -17,6 +18,8 @@ interface MarkerSource {
 
 // Which map to load. The procedural circuit stays available for comparison.
 const USE_ISLAND = true;
+// Live x/z readout in the HUD, for scouting landmark coordinates while driving.
+const SHOW_COORDS = true;
 
 const SKY_COLOR = 0x9ec9e8; // daytime sky
 const PIXEL_SCALE = 0.85; // low-res render upscaled for a retro pixelated look
@@ -32,6 +35,7 @@ export class Game {
   private input = new Input();
   private ui = new UIOverlay();
 
+  private coordsEl = document.getElementById("coords");
   private car?: Car;
   private world?: WorldResult; // circuit mode
   private island?: IslandWorld; // island mode
@@ -83,7 +87,7 @@ export class Game {
       this.car.setGroundSampler(this.island.sampleGround);
       this.car.setWallChecker(this.island.checkWall);
       this.car.resetTo(this.spawn.x, this.spawn.z, this.spawn.heading);
-      // Portfolio markers intentionally deferred — placement TBD after test drives.
+      this.landmarks = new IslandMarkers(this.scene, this.island.sampleGround);
     } else {
       this.world = createWorld(this.scene);
       this.landmarks = new LandmarkManager(this.scene, this.world.anchors);
@@ -162,6 +166,11 @@ export class Game {
       const active = this.landmarks?.update(time, this.car.position) ?? null;
       if (active) this.ui.show(active.data.id, active.data.title, active.data.html);
       else this.ui.hide();
+
+      if (SHOW_COORDS && this.coordsEl) {
+        const p = this.car.position;
+        this.coordsEl.textContent = `x: ${p.x.toFixed(1)}   z: ${p.z.toFixed(1)}`;
+      }
     }
 
     this.composer.render();
