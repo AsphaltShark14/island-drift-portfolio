@@ -46,6 +46,14 @@ const WHEEL_SPIN_RADIUS = 0.28;
 const TERRAIN_CLIMB = 1.5; // max height step the car will drive up (curbs, ramps)
 const TERRAIN_MIN_Y = -2.0; // below this = water/void → blocked
 const WALL_PROBE_HEIGHT = 0.55; // above curbs/ramps, below building walls
+// Burnout: hold forward + backward together to spin the wheels in place;
+// release one to launch in that direction.
+const BURNOUT_HOLD_DAMP = 10; // how hard we cancel drift while holding the burnout
+const BURNOUT_CHARGE_TIME = 1.0; // seconds of holding to reach full launch power
+const BURNOUT_LAUNCH_BASE = 9; // minimum launch speed
+const BURNOUT_LAUNCH_BONUS = 9; // extra speed at full charge
+const BURNOUT_WHEEL_REV_SPEED = 24; // visual-only wheel spin rate while revving
+const LAUNCH_SMOKE_DURATION = 0.5; // seconds of guaranteed smoke after a launch
 
 export class Car {
   readonly mesh: THREE.Group;
@@ -60,6 +68,10 @@ export class Car {
   private modelPivot = new THREE.Group();
   private wheels: WheelRef[] = [];
   private smoke: SmokeSystem;
+
+  private burnoutCharge = 0;
+  private wasBurnout = false;
+  private launchSmokeTimer = 0;
 
   /** When set, the car follows this ground surface and is bounded by it. */
   private groundSampler?: (x: number, z: number, refY?: number) => number | null;
@@ -122,14 +134,32 @@ export class Car {
     let vLong = this.velocity.dot(this.forward);
     let vLat = this.velocity.dot(this.right);
 
-    // --- Engine / brakes ---
-    if (input.forward) {
-      vLong = Math.min(vLong + ENGINE_ACCEL * dt, MAX_SPEED);
-    } else if (input.backward) {
-      vLong = Math.max(vLong - BRAKE_ACCEL * dt, -MAX_REVERSE);
+    // --- Burnout: holding forward + backward together revs in place; ---
+    // --- releasing one launches hard in that direction.               ---
+    const burnout = input.forward && input.backward;
+    if (burnout) {
+      vLong -= vLong * BURNOUT_HOLD_DAMP * dt;
+      this.burnoutCharge = Math.min(this.burnoutCharge + dt / BURNOUT_CHARGE_TIME, 1);
     } else {
-      vLong -= vLong * ROLL_DRAG * dt;
+      if (this.wasBurnout) {
+        const dir = input.forward ? 1 : input.backward ? -1 : 0;
+        if (dir !== 0) {
+          vLong = dir * (BURNOUT_LAUNCH_BASE + BURNOUT_LAUNCH_BONUS * this.burnoutCharge);
+          this.launchSmokeTimer = LAUNCH_SMOKE_DURATION;
+        }
+        this.burnoutCharge = 0;
+      }
+
+      // --- Engine / brakes ---
+      if (input.forward) {
+        vLong = Math.min(vLong + ENGINE_ACCEL * dt, MAX_SPEED);
+      } else if (input.backward) {
+        vLong = Math.max(vLong - BRAKE_ACCEL * dt, -MAX_REVERSE);
+      } else {
+        vLong -= vLong * ROLL_DRAG * dt;
+      }
     }
+    this.wasBurnout = burnout;
 
     // --- Steering (authority scales with speed, flips in reverse) ---
     const speedFactor = THREE.MathUtils.clamp(Math.abs(vLong) / 6, 0, 1);
@@ -165,7 +195,8 @@ export class Car {
     this.mesh.position.copy(this.position);
     this.mesh.rotation.y = this.heading;
 
-    const spin = (vLong * dt) / WHEEL_SPIN_RADIUS;
+    const spinSpeed = burnout ? BURNOUT_WHEEL_REV_SPEED : vLong;
+    const spin = (spinSpeed * dt) / WHEEL_SPIN_RADIUS;
     for (const wheel of this.wheels) {
       if (wheel.axis === "x") wheel.obj.rotation.x += spin;
       else if (wheel.axis === "y") wheel.obj.rotation.y += spin;
@@ -173,8 +204,10 @@ export class Car {
     }
 
     this.smoke.update(dt);
-    if (this.isDrifting && Math.abs(vLong) > 2) {
-      this.smoke.emit(this.position, this.right);
+    this.launchSmokeTimer = Math.max(0, this.launchSmokeTimer - dt);
+    const smoking = burnout || this.launchSmokeTimer > 0 || (this.isDrifting && Math.abs(vLong) > 2);
+    if (smoking) {
+      this.smoke.emit(this.position, this.forward, this.right);
     }
   }
 
@@ -442,6 +475,7 @@ class SmokeSystem {
   private next = 0;
   private cooldown = 0;
   private static readonly MAX = 44;
+  private static readonly REAR_OFFSET = 0.9; // distance behind the car's centre to the rear wheels
 
   constructor(scene: THREE.Scene) {
     const material = new THREE.SpriteMaterial({
@@ -461,16 +495,16 @@ class SmokeSystem {
     }
   }
 
-  emit(position: THREE.Vector3, right: THREE.Vector2): void {
+  emit(position: THREE.Vector3, forward: THREE.Vector2, right: THREE.Vector2): void {
     if (this.cooldown > 0) return;
     this.cooldown = 0.03;
-    // Puff behind each rear wheel.
+    // Puff behind each rear wheel: back along -forward, out along ±right.
     for (const side of [-1, 1]) {
       const sprite = this.sprites[this.next];
       sprite.position.set(
-        position.x + right.x * 0.5 * side,
+        position.x - forward.x * SmokeSystem.REAR_OFFSET + right.x * 0.5 * side,
         position.y + 0.25,
-        position.z + right.y * 0.5 * side,
+        position.z - forward.y * SmokeSystem.REAR_OFFSET + right.y * 0.5 * side,
       );
       sprite.scale.setScalar(0.5 + Math.random() * 0.3);
       (sprite.material as THREE.SpriteMaterial).opacity = 0.55;
