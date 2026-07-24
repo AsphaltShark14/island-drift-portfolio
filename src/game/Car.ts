@@ -16,6 +16,11 @@ const DRIFT_SLIP_THRESHOLD = 3.2; // |lateral speed| above which tyres smoke
 const TARGET_LENGTH = 2.2; // world units the loaded model is scaled to
 const CAR_RADIUS = 0.95; // collision circle
 const WHEEL_SPIN_RADIUS = 0.28;
+// Island surface-follow limits (scaled to match the island's world scale).
+// Keep >= IslandWorld SURFACE_CEIL so a surface the sampler selects is drivable.
+const TERRAIN_CLIMB = 1.5; // max height step the car will drive up (curbs, ramps)
+const TERRAIN_MIN_Y = -2.0; // below this = water/void → blocked
+const WALL_PROBE_HEIGHT = 0.55; // above curbs/ramps, below building walls
 
 export class Car {
   readonly mesh: THREE.Group;
@@ -30,6 +35,11 @@ export class Car {
   private modelPivot = new THREE.Group();
   private wheels: THREE.Object3D[] = [];
   private smoke: SmokeSystem;
+
+  /** When set, the car follows this ground surface and is bounded by it. */
+  private groundSampler?: (x: number, z: number, refY?: number) => number | null;
+  /** When set, blocks the car from driving through vertical surfaces (walls). */
+  private wallChecker?: (x: number, y: number, z: number, dx: number, dz: number, dist: number) => boolean;
 
   /** Signed forward speed, for camera shake / HUD. */
   get speed(): number {
@@ -102,11 +112,15 @@ export class Car {
       .multiplyScalar(vLong)
       .addScaledVector(this.right, vLat);
 
-    // Integrate + resolve collisions against buildings and barriers.
-    this.position.x += this.velocity.x * dt;
-    this.position.z += this.velocity.y * dt;
-    this.resolveCollisions(colliders);
-    this.resolveWalls(walls);
+    // Integrate — either follow a 3D surface (island) or flat ground + colliders.
+    if (this.groundSampler) {
+      this.moveOnTerrain(dt);
+    } else {
+      this.position.x += this.velocity.x * dt;
+      this.position.z += this.velocity.y * dt;
+      this.resolveCollisions(colliders);
+      this.resolveWalls(walls);
+    }
 
     // --- Visuals ---
     this.mesh.position.copy(this.position);
@@ -119,6 +133,53 @@ export class Car {
     if (this.isDrifting && Math.abs(vLong) > 2) {
       this.smoke.emit(this.position, this.right);
     }
+  }
+
+  setGroundSampler(fn: (x: number, z: number, refY?: number) => number | null): void {
+    this.groundSampler = fn;
+    const y = fn(this.position.x, this.position.z);
+    if (y !== null) this.position.y = y;
+  }
+
+  setWallChecker(fn: (x: number, y: number, z: number, dx: number, dz: number, dist: number) => boolean): void {
+    this.wallChecker = fn;
+  }
+
+  // --- Surface follow + containment (island mode) ------------------------
+  private moveOnTerrain(dt: number): void {
+    const sample = this.groundSampler!;
+    const carY = this.position.y;
+    // refY = current height so the sampler returns the road under overpasses.
+    const okHeight = (g: number | null): g is number =>
+      g !== null && g - carY <= TERRAIN_CLIMB && g >= TERRAIN_MIN_Y;
+    // Probe just above the road surface so flat ground/curbs/ramps don't
+    // register as walls — only genuinely vertical geometry (building walls,
+    // railings) does.
+    const probeY = carY + WALL_PROBE_HEIGHT;
+    const noWall = (dx: number, dz: number, dist: number): boolean =>
+      !this.wallChecker || !this.wallChecker(this.position.x, probeY, this.position.z, dx, dz, dist);
+
+    // Per-axis so the car slides along water edges / building walls.
+    const moveX = this.velocity.x * dt;
+    const tryX = this.position.x + moveX;
+    if (okHeight(sample(tryX, this.position.z, carY)) && noWall(Math.sign(moveX), 0, CAR_RADIUS + Math.abs(moveX))) {
+      this.position.x = tryX;
+    } else {
+      this.velocity.x *= 0.35;
+    }
+
+    const moveZ = this.velocity.y * dt;
+    const tryZ = this.position.z + moveZ;
+    if (okHeight(sample(this.position.x, tryZ, carY)) && noWall(0, Math.sign(moveZ), CAR_RADIUS + Math.abs(moveZ))) {
+      this.position.z = tryZ;
+    } else {
+      this.velocity.y *= 0.35;
+    }
+
+    // Snap onto the surface height. A lerp here would lag behind on slopes
+    // (bridge ramps) at speed, visibly sinking the car into the road.
+    const gy = sample(this.position.x, this.position.z, carY);
+    if (gy !== null) this.position.y = gy;
   }
 
   // --- Collision: car as a circle vs building AABBs -----------------------
@@ -365,7 +426,7 @@ class SmokeSystem {
       const sprite = this.sprites[this.next];
       sprite.position.set(
         position.x + right.x * 0.5 * side,
-        0.25,
+        position.y + 0.25,
         position.z + right.y * 0.5 * side,
       );
       sprite.scale.setScalar(0.5 + Math.random() * 0.3);

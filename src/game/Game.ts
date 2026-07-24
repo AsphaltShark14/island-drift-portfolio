@@ -5,13 +5,22 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { Input } from "./Input";
 import { Car } from "./Car";
 import { createWorld, type WorldResult, type AABB, type Wall } from "./World";
+import { createIslandWorld, type IslandWorld } from "./IslandWorld";
 import { LandmarkManager } from "./Landmarks";
 import { UIOverlay } from "./UIOverlay";
+import type { LandmarkData } from "./PortfolioData";
 
-const SKY_COLOR = 0x9ec9e8; // daytime Tokyo sky
-const VIEW_SIZE = 24;
-const PIXEL_SCALE = 0.5; // low-res render upscaled for a retro pixelated look
-const ISO_OFFSET = new THREE.Vector3(1, 1, 1).multiplyScalar(26);
+/** Anything that reports the active portfolio stop near the car. */
+interface MarkerSource {
+  update(time: number, carPosition: THREE.Vector3): { data: LandmarkData } | null;
+}
+
+// Which map to load. The procedural circuit stays available for comparison.
+const USE_ISLAND = true;
+
+const SKY_COLOR = 0x9ec9e8; // daytime sky
+const PIXEL_SCALE = 0.85; // low-res render upscaled for a retro pixelated look
+const ISO_OFFSET = new THREE.Vector3(1, 1, 1).multiplyScalar(30);
 
 export class Game {
   private renderer: THREE.WebGLRenderer;
@@ -21,12 +30,17 @@ export class Game {
   private camera: THREE.OrthographicCamera;
   private clock = new THREE.Clock();
   private input = new Input();
-  private car: Car;
-  private world: WorldResult;
-  private landmarks: LandmarkManager;
   private ui = new UIOverlay();
-  private colliders: AABB[];
-  private walls: Wall[];
+
+  private car?: Car;
+  private world?: WorldResult; // circuit mode
+  private island?: IslandWorld; // island mode
+  private landmarks?: MarkerSource;
+  private colliders: AABB[] = [];
+  private walls: Wall[] = [];
+
+  private viewSize = USE_ISLAND ? 22 : 24;
+  private ready = false;
   private cameraTarget = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -36,77 +50,115 @@ export class Game {
     this.renderer.toneMappingExposure = 1.0;
 
     this.scene.background = new THREE.Color(SKY_COLOR);
-    this.scene.fog = new THREE.Fog(SKY_COLOR, 30, 72);
+    this.scene.fog = new THREE.Fog(SKY_COLOR, 40, 140);
 
     this.camera = new THREE.OrthographicCamera();
 
-    // Daytime: bright sky fill + warm directional sun for clean flat-shaded look.
-    const hemi = new THREE.HemisphereLight(0xcfe8ff, 0x6b5a45, 1.15);
+    const hemi = new THREE.HemisphereLight(0xdff0ff, 0x6b5a45, 1.5);
     this.scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff2d6, 1.7);
+    const sun = new THREE.DirectionalLight(0xfff2d6, 2.0);
     sun.position.set(18, 30, 12);
     this.scene.add(sun);
 
-    // Build the circuit, then anchor landmarks to roadside points on it.
-    this.world = createWorld(this.scene);
-    this.landmarks = new LandmarkManager(this.scene, this.world.anchors);
-    this.colliders = this.world.colliders;
-    this.walls = this.world.walls;
-
-    this.car = new Car(this.scene);
-    this.car.position.set(this.world.spawn.x, 0, this.world.spawn.z);
-    this.car.heading = this.world.spawn.heading;
-    this.cameraTarget.copy(this.car.position);
-    this.updateCameraPosition();
-
-    // Post-processing: a gentle bloom so signage/lights pop without washing out.
+    // Post-processing: a gentle bloom so lights/signage pop without washing out.
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    // strength, radius, threshold — high threshold so only the brightest bits bloom.
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.18, 0.3, 0.9);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.15, 0.3, 0.9);
     this.composer.addPass(this.bloom);
 
     window.addEventListener("resize", () => this.handleResize());
     this.handleResize();
+
+    void this.init();
+  }
+
+  private async init(): Promise<void> {
+    if (USE_ISLAND) {
+      this.island = await createIslandWorld(this.scene);
+      this.scene.fog = new THREE.Fog(SKY_COLOR, this.island.radius * 0.7, this.island.radius * 2.4);
+
+      this.car = new Car(this.scene);
+      this.car.position.set(this.island.spawn.x, 0, this.island.spawn.z);
+      this.car.heading = this.island.spawn.heading;
+      this.car.setGroundSampler(this.island.sampleGround);
+      this.car.setWallChecker(this.island.checkWall);
+      // Portfolio markers intentionally deferred — placement TBD after test drives.
+    } else {
+      this.world = createWorld(this.scene);
+      this.landmarks = new LandmarkManager(this.scene, this.world.anchors);
+      this.colliders = this.world.colliders;
+      this.walls = this.world.walls;
+
+      this.car = new Car(this.scene);
+      this.car.position.set(this.world.spawn.x, 0, this.world.spawn.z);
+      this.car.heading = this.world.spawn.heading;
+    }
+
+    this.cameraTarget.copy(this.car.position);
+    this.updateCameraPosition();
+    this.ready = true;
   }
 
   start(): void {
     this.renderer.setAnimationLoop(() => this.tick());
   }
 
-  /** Dev/testing helper: drop the car at a spot and stop it. */
+  // --- Dev/testing helpers (stripped from production builds) --------------
   placeCar(x: number, z: number, heading = 0): void {
-    this.car.position.set(x, 0, z);
-    this.car.heading = heading;
-    this.car.halt();
+    this.car?.position.set(x, 0, z);
+    if (this.car) this.car.heading = heading;
+    this.car?.halt();
   }
-
-  /** Dev/testing helper: current car x/z. */
   carX(): number {
-    return this.car.position.x;
+    return this.car?.position.x ?? 0;
   }
   carZ(): number {
-    return this.car.position.z;
+    return this.car?.position.z ?? 0;
+  }
+  carY(): number {
+    return this.car?.position.y ?? 0;
+  }
+  isReady(): boolean {
+    return this.ready;
+  }
+  debugSample(x: number, z: number): number | null {
+    return this.island ? this.island.sampleGround(x, z) : null;
+  }
+  debugRadius(): number {
+    return this.island?.radius ?? 0;
+  }
+  debugWall(dx: number, dz: number, dist: number): boolean {
+    if (!this.island || !this.car) return false;
+    return this.island.checkWall(this.car.position.x, this.car.position.y + 0.55, this.car.position.z, dx, dz, dist);
+  }
+  debugSurfaces(): { top: number | null; atCar: number | null; y: number } {
+    const x = this.carX();
+    const z = this.carZ();
+    const y = this.carY();
+    return {
+      top: this.island ? this.island.sampleGround(x, z) : null,
+      atCar: this.island ? this.island.sampleGround(x, z, y) : null,
+      y: +y.toFixed(2),
+    };
   }
   debugAnchors(): Array<{ x: number; z: number; rot: number }> {
-    return this.world.anchors;
+    return this.world?.anchors ?? [];
   }
 
   private tick(): void {
     const dt = Math.min(this.clock.getDelta(), 0.1);
     const time = this.clock.elapsedTime;
 
-    this.car.update(dt, this.input.getState(), this.colliders, this.walls);
-    this.world.update(time);
+    if (this.ready && this.car) {
+      this.car.update(dt, this.input.getState(), this.colliders, this.walls);
+      this.world?.update(time);
 
-    this.cameraTarget.lerp(this.car.position, 1 - Math.pow(0.0015, dt));
-    this.updateCameraPosition();
+      this.cameraTarget.lerp(this.car.position, 1 - Math.pow(0.0015, dt));
+      this.updateCameraPosition();
 
-    const active = this.landmarks.update(time, this.car.position);
-    if (active) {
-      this.ui.show(active.data.id, active.data.title, active.data.html);
-    } else {
-      this.ui.hide();
+      const active = this.landmarks?.update(time, this.car.position) ?? null;
+      if (active) this.ui.show(active.data.id, active.data.title, active.data.html);
+      else this.ui.hide();
     }
 
     this.composer.render();
@@ -122,12 +174,12 @@ export class Game {
     const height = window.innerHeight;
     const aspect = width / height;
 
-    this.camera.left = (-VIEW_SIZE * aspect) / 2;
-    this.camera.right = (VIEW_SIZE * aspect) / 2;
-    this.camera.top = VIEW_SIZE / 2;
-    this.camera.bottom = -VIEW_SIZE / 2;
+    this.camera.left = (-this.viewSize * aspect) / 2;
+    this.camera.right = (this.viewSize * aspect) / 2;
+    this.camera.top = this.viewSize / 2;
+    this.camera.bottom = -this.viewSize / 2;
     this.camera.near = 0.1;
-    this.camera.far = 120;
+    this.camera.far = 400;
     this.camera.updateProjectionMatrix();
 
     const rw = Math.floor(width * PIXEL_SCALE);
