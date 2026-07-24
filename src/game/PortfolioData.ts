@@ -118,4 +118,27 @@ export const LANDMARKS: LandmarkData[] = [
       <p><strong>Libraries:</strong> Tanstack, zustand, Redux, recharts</p>
       <p><strong>Other:</strong> Figma</p>`,
   },
+  {
+    id: "projects",
+    title: "My Projects",
+    position: [-121.2, 16.2],
+    footprint: [5, 5],
+    color: 0x3a7bd5,
+    kind: "arcade",
+    html: `<ul>
+      <li><strong>Pokédex App</strong> — Expo Router, Tamagui, Zustand, TanStack
+        Query, Reanimated. Browse Pokémon with animated, type-themed detail pages.
+        <a href="https://github.com/AsphaltShark14/pokedex-app" target="_blank" rel="noopener noreferrer">↗ GitHub</a></li>
+      <li><strong>Movie Database</strong> — React, TypeScript, Redux, TanStack Query,
+        Tailwind, Vite. Browse/search movies &amp; TV shows by category, with favorites.
+        <a href="https://github.com/AsphaltShark14/movie-database-react" target="_blank" rel="noopener noreferrer">↗ GitHub</a>
+        &nbsp;·&nbsp;
+        <a href="https://superb-cupcake-ecb463.netlify.app/" target="_blank" rel="noopener noreferrer">↗ Live demo</a></li>
+      <li><strong>Rick &amp; Morty App</strong> — React Native, Expo, Native Base,
+        TanStack Query. Browse characters via the Rick &amp; Morty API.
+        <a href="https://github.com/AsphaltShark14/native-rick-and-morty-app" target="_blank" rel="noopener noreferrer">↗ GitHub</a></li>
+      <li><strong>This Portfolio</strong> — Three.js, TypeScript, Vite. The drivable
+        3D island you're driving around right now. Not on GitHub yet — coming soon.</li>
+    </ul>`,
+  },
 ];
