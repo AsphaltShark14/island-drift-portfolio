@@ -106,7 +106,12 @@ export class Game {
 
     this.cameraTarget.copy(this.car.position);
     this.updateCameraPosition();
+
+    // Don't reveal the scene (or start driving) until the real car model is
+    // in too — otherwise the fallback box-car flashes in first.
+    await this.car.modelReady;
     this.ready = true;
+    document.getElementById("loading")?.classList.add("hidden");
   }
 
   start(): void {

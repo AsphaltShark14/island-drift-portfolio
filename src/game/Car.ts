@@ -80,13 +80,16 @@ export class Car {
     return this.lateralSpeed > DRIFT_SLIP_THRESHOLD;
   }
 
+  /** Resolves once the real GLB has loaded (or definitively failed and kept the fallback). */
+  readonly modelReady: Promise<void>;
+
   constructor(scene: THREE.Scene) {
     this.mesh = new THREE.Group();
     this.mesh.add(this.modelPivot);
 
     // Procedural fallback shows instantly; GLB swaps in when it loads.
     this.buildFallback();
-    void this.loadModel();
+    this.modelReady = this.loadModel();
 
     this.smoke = new SmokeSystem(scene);
 
