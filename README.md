@@ -4,6 +4,8 @@ A drivable 3D portfolio. Instead of scrolling a page, you drive a low-poly
 JDM car around an island, discovering "About Me", work experience, projects,
 and skills as landmarks scattered across the map.
 
+**Live:** https://sage-bombolone-e9f205.netlify.app/
+
 ![Screenshot](docs/screenshot.png)
 
 ## Controls
