@@ -137,6 +137,10 @@ export const LANDMARKS: LandmarkData[] = [
       <li><strong>Rick &amp; Morty App</strong> — React Native, Expo, Native Base,
         TanStack Query. Browse characters via the Rick &amp; Morty API.
         <a href="https://github.com/AsphaltShark14/native-rick-and-morty-app" target="_blank" rel="noopener noreferrer">↗ GitHub</a></li>
+      <li><strong>Muse-Me</strong> — React Native, Expo, Tamagui, TanStack Query,
+        Socket.IO, Firebase. Social music app with real-time features, push
+        notifications, audio recording, and photo sharing. Contributed as part of
+        the team (private repo).</li>
       <li><strong>This Portfolio</strong> — Three.js, TypeScript, Vite. The drivable
         3D island you're driving around right now. Not on GitHub yet — coming soon.</li>
     </ul>`,
