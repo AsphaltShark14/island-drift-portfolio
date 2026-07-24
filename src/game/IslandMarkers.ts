@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { LANDMARKS, type LandmarkData } from "./PortfolioData";
+import type { CompassTarget } from "./Compass";
 
 const TRIGGER_RADIUS = 6;
 const PIN_HEIGHT = 4;
@@ -65,5 +66,14 @@ export class IslandMarkers {
       }
     }
     return nearest;
+  }
+
+  getAll(): CompassTarget[] {
+    return this.markers.map((m) => ({
+      id: m.data.id,
+      title: m.data.title,
+      color: m.data.color,
+      position: m.position.clone().add(new THREE.Vector3(0, PIN_HEIGHT / 2, 0)),
+    }));
   }
 }

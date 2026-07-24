@@ -19,7 +19,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "About Me",
     position: [-63.7, -0.8],
     footprint: [6, 5],
-    color: 0xffb84d,
+    color: 0xff5252,
     kind: "cafe",
     html: `<p>Software Developer with experience across the full stack — building
       applications from scratch, shipping features, and keeping production systems
@@ -39,7 +39,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "Green Cell",
     position: [55, -1.0],
     footprint: [5, 5],
-    color: 0x39ff88,
+    color: 0x4ade80,
     kind: "office",
     html: `<p class="job-period">Web Developer · Jan 2020 – Jun 2021</p>
       <ul>
@@ -56,7 +56,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "HEAP (Freelancing)",
     position: [99.2, -1.2],
     footprint: [5, 5],
-    color: 0x2ee6ff,
+    color: 0x38bdf8,
     kind: "arcade",
     html: `<p class="job-period">React Native Developer · Jun 2021 – Jul 2022</p>
       <ul>
@@ -70,7 +70,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "Liki",
     position: [114.8, -29.4],
     footprint: [5, 5],
-    color: 0x8b5cff,
+    color: 0x8b5cf6,
     kind: "office",
     html: `<p class="job-period">Front-end Developer · Jun 2022 – Oct 2023</p>
       <ul>
@@ -88,7 +88,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "Grass Valley",
     position: [60.7, -34.6],
     footprint: [6, 6],
-    color: 0xff2e88,
+    color: 0xf472b6,
     kind: "gas",
     html: `<p class="job-period">Software Developer · Oct 2023 – Present</p>
       <p>Maintaining and evolving production-grade broadcast applications — bug
@@ -110,7 +110,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "Tools",
     position: [-113.5, 7.1],
     footprint: [4, 4],
-    color: 0xf2b134,
+    color: 0xffb347,
     kind: "workshop",
     html: `<p><strong>Languages:</strong> JavaScript, TypeScript, C#, SQL</p>
       <p><strong>Frameworks:</strong> React, React Native, Next.js, .NET, Node.js</p>
@@ -123,7 +123,7 @@ export const LANDMARKS: LandmarkData[] = [
     title: "My Projects",
     position: [-121.2, 16.2],
     footprint: [5, 5],
-    color: 0x3a7bd5,
+    color: 0xffe066,
     kind: "arcade",
     html: `<ul>
       <li><strong>Pokédex App</strong> — Expo Router, Tamagui, Zustand, TanStack

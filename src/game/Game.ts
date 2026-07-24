@@ -9,17 +9,19 @@ import { createIslandWorld, type IslandWorld } from "./IslandWorld";
 import { LandmarkManager } from "./Landmarks";
 import { IslandMarkers } from "./IslandMarkers";
 import { UIOverlay } from "./UIOverlay";
+import { Compass, type CompassTarget } from "./Compass";
 import type { LandmarkData } from "./PortfolioData";
 
 /** Anything that reports the active portfolio stop near the car. */
 interface MarkerSource {
   update(time: number, carPosition: THREE.Vector3): { data: LandmarkData } | null;
+  getAll(): CompassTarget[];
 }
 
 // Which map to load. The procedural circuit stays available for comparison.
 const USE_ISLAND = true;
 // Live x/z readout in the HUD, for scouting landmark coordinates while driving.
-const SHOW_COORDS = true;
+const SHOW_COORDS = false;
 
 const SKY_COLOR = 0x9ec9e8; // daytime sky
 const PIXEL_SCALE = 0.85; // low-res render upscaled for a retro pixelated look
@@ -40,6 +42,7 @@ export class Game {
   private world?: WorldResult; // circuit mode
   private island?: IslandWorld; // island mode
   private landmarks?: MarkerSource;
+  private compass?: Compass;
   private colliders: AABB[] = [];
   private walls: Wall[] = [];
 
@@ -98,6 +101,8 @@ export class Game {
       this.car = new Car(this.scene);
       this.car.resetTo(this.spawn.x, this.spawn.z, this.spawn.heading);
     }
+
+    this.compass = new Compass(this.landmarks.getAll());
 
     this.cameraTarget.copy(this.car.position);
     this.updateCameraPosition();
@@ -166,6 +171,8 @@ export class Game {
       const active = this.landmarks?.update(time, this.car.position) ?? null;
       if (active) this.ui.show(active.data.id, active.data.title, active.data.html);
       else this.ui.hide();
+
+      if (this.landmarks) this.compass?.update(this.camera, this.landmarks.getAll());
 
       if (SHOW_COORDS && this.coordsEl) {
         const p = this.car.position;

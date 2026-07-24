@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { LANDMARKS, type LandmarkData, type LandmarkKind } from "./PortfolioData";
 import type { Anchor } from "./World";
+import type { CompassTarget } from "./Compass";
 
 // --- Themed building builders -------------------------------------------
 // Each builds a themed building around the local origin, with its front
@@ -265,5 +266,14 @@ export class LandmarkManager {
       }
     }
     return nearest;
+  }
+
+  getAll(): CompassTarget[] {
+    return this.landmarks.map((l) => ({
+      id: l.data.id,
+      title: l.data.title,
+      color: l.data.color,
+      position: l.position,
+    }));
   }
 }
