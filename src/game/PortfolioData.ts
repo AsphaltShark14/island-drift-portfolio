@@ -142,7 +142,8 @@ export const LANDMARKS: LandmarkData[] = [
         notifications, audio recording, and photo sharing. Contributed as part of
         the team (private repo).</li>
       <li><strong>This Portfolio</strong> — Three.js, TypeScript, Vite. The drivable
-        3D island you're driving around right now. Not on GitHub yet — coming soon.</li>
+        3D island you're driving around right now.
+        <a href="https://github.com/AsphaltShark14/island-drift-portfolio" target="_blank" rel="noopener noreferrer">↗ GitHub</a></li>
     </ul>`,
   },
 ];
