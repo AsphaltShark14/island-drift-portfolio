@@ -3,6 +3,31 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import type { InputState } from "./Input";
 import type { AABB, Wall } from "./World";
 
+interface WheelRef {
+  obj: THREE.Object3D;
+  axis: "x" | "y" | "z";
+}
+
+/**
+ * A wheel's rolling axis is whichever local axis its geometry is thinnest
+ * along (the axle direction) — true regardless of how the source model was
+ * authored, unlike assuming a fixed axis for every model.
+ */
+function detectSpinAxis(obj: THREE.Object3D): "x" | "y" | "z" {
+  const mesh = (obj as THREE.Mesh).isMesh
+    ? (obj as THREE.Mesh)
+    : (obj.children.find((c) => (c as THREE.Mesh).isMesh) as THREE.Mesh | undefined);
+  if (!mesh?.geometry) return "x";
+  mesh.geometry.computeBoundingBox();
+  const box = mesh.geometry.boundingBox;
+  if (!box) return "x";
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  if (size.x <= size.y && size.x <= size.z) return "x";
+  if (size.y <= size.x && size.y <= size.z) return "y";
+  return "z";
+}
+
 // --- Tuning -------------------------------------------------------------
 const MAX_SPEED = 20;
 const MAX_REVERSE = 7;
@@ -33,7 +58,7 @@ export class Car {
   private right = new THREE.Vector2(0, 0);
 
   private modelPivot = new THREE.Group();
-  private wheels: THREE.Object3D[] = [];
+  private wheels: WheelRef[] = [];
   private smoke: SmokeSystem;
 
   /** When set, the car follows this ground surface and is bounded by it. */
@@ -138,7 +163,11 @@ export class Car {
     this.mesh.rotation.y = this.heading;
 
     const spin = (vLong * dt) / WHEEL_SPIN_RADIUS;
-    for (const wheel of this.wheels) wheel.rotation.x += spin;
+    for (const wheel of this.wheels) {
+      if (wheel.axis === "x") wheel.obj.rotation.x += spin;
+      else if (wheel.axis === "y") wheel.obj.rotation.y += spin;
+      else wheel.obj.rotation.z += spin;
+    }
 
     this.smoke.update(dt);
     if (this.isDrifting && Math.abs(vLong) > 2) {
@@ -304,7 +333,7 @@ export class Car {
       const wheel = new THREE.Mesh(wheelGeo, dark);
       wheel.position.set(x, WHEEL_SPIN_RADIUS, z);
       group.add(wheel);
-      this.wheels.push(wheel);
+      this.wheels.push({ obj: wheel, axis: detectSpinAxis(wheel) });
     }
 
     this.addLampsAndLights(group);
@@ -325,9 +354,9 @@ export class Car {
       const normalized = this.normalizeModel(root);
 
       // Grab wheels for spinning; give the body a night-friendly finish.
-      const wheels: THREE.Object3D[] = [];
+      const wheels: WheelRef[] = [];
       normalized.traverse((o) => {
-        if (/wheel/i.test(o.name)) wheels.push(o);
+        if (/wheel/i.test(o.name)) wheels.push({ obj: o, axis: detectSpinAxis(o) });
         const mesh = o as THREE.Mesh;
         if (mesh.isMesh) {
           const mat = mesh.material as THREE.MeshStandardMaterial;

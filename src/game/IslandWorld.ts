@@ -84,7 +84,7 @@ export async function createIslandWorld(scene: THREE.Scene): Promise<IslandWorld
   raycaster.far = 600;
   const origin = new THREE.Vector3();
   const down = new THREE.Vector3(0, -1, 0);
-  const sampleGround = (x: number, z: number, refY = Infinity): number | null => {
+  const resolveAt = (x: number, z: number, refY: number): number | null => {
     origin.set(x, 250, z);
     raycaster.set(origin, down);
     const hits = raycaster.intersectObjects(meshes, false); // sorted top → bottom
@@ -95,6 +95,29 @@ export async function createIslandWorld(scene: THREE.Scene): Promise<IslandWorld
       if (h.point.y <= refY + SURFACE_CEIL) return h.point.y;
     }
     return hits[hits.length - 1].point.y; // everything is overhead → lowest surface
+  };
+
+  // Sampling a small cluster (not just the exact point) and taking the
+  // lowest resolved height makes this robust against thin vertical spikes —
+  // a lamp post or canopy support pole caught by a single ray — which would
+  // otherwise register as a moment of "ground" well above the real pavement.
+  // A genuinely raised, walkable area (ramp, roof deck) reads elevated at
+  // every offset, so it's unaffected.
+  const CLUSTER_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+    [0, 0],
+    [0.35, 0],
+    [-0.35, 0],
+    [0, 0.35],
+    [0, -0.35],
+  ];
+  const sampleGround = (x: number, z: number, refY = Infinity): number | null => {
+    if (refY === Infinity) return resolveAt(x, z, refY);
+    let best: number | null = null;
+    for (const [dx, dz] of CLUSTER_OFFSETS) {
+      const h = resolveAt(x + dx, z + dz, refY);
+      if (h !== null && (best === null || h < best)) best = h;
+    }
+    return best;
   };
 
   // Horizontal raycaster for wall detection — a separate instance/vectors so
