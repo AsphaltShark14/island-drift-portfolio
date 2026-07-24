@@ -42,6 +42,7 @@ export class Game {
   private viewSize = USE_ISLAND ? 22 : 24;
   private ready = false;
   private cameraTarget = new THREE.Vector3();
+  private spawn = { x: 0, z: 0, heading: 0 };
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
@@ -77,11 +78,11 @@ export class Game {
       this.island = await createIslandWorld(this.scene);
       this.scene.fog = new THREE.Fog(SKY_COLOR, this.island.radius * 0.7, this.island.radius * 2.4);
 
+      this.spawn = this.island.spawn;
       this.car = new Car(this.scene);
-      this.car.position.set(this.island.spawn.x, 0, this.island.spawn.z);
-      this.car.heading = this.island.spawn.heading;
       this.car.setGroundSampler(this.island.sampleGround);
       this.car.setWallChecker(this.island.checkWall);
+      this.car.resetTo(this.spawn.x, this.spawn.z, this.spawn.heading);
       // Portfolio markers intentionally deferred — placement TBD after test drives.
     } else {
       this.world = createWorld(this.scene);
@@ -89,9 +90,9 @@ export class Game {
       this.colliders = this.world.colliders;
       this.walls = this.world.walls;
 
+      this.spawn = this.world.spawn;
       this.car = new Car(this.scene);
-      this.car.position.set(this.world.spawn.x, 0, this.world.spawn.z);
-      this.car.heading = this.world.spawn.heading;
+      this.car.resetTo(this.spawn.x, this.spawn.z, this.spawn.heading);
     }
 
     this.cameraTarget.copy(this.car.position);
@@ -105,9 +106,7 @@ export class Game {
 
   // --- Dev/testing helpers (stripped from production builds) --------------
   placeCar(x: number, z: number, heading = 0): void {
-    this.car?.position.set(x, 0, z);
-    if (this.car) this.car.heading = heading;
-    this.car?.halt();
+    this.car?.resetTo(x, z, heading);
   }
   carX(): number {
     return this.car?.position.x ?? 0;
@@ -150,6 +149,10 @@ export class Game {
     const time = this.clock.elapsedTime;
 
     if (this.ready && this.car) {
+      if (this.input.consumeReset()) {
+        this.car.resetTo(this.spawn.x, this.spawn.z, this.spawn.heading);
+        this.cameraTarget.copy(this.car.position);
+      }
       this.car.update(dt, this.input.getState(), this.colliders, this.walls);
       this.world?.update(time);
 

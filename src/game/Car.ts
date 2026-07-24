@@ -75,6 +75,17 @@ export class Car {
     this.velocity.set(0, 0);
   }
 
+  /** Teleport back to a spawn point (e.g. the "R" reset key) and stop. */
+  resetTo(x: number, z: number, heading: number): void {
+    this.position.set(x, 0, z);
+    this.heading = heading;
+    this.halt();
+    if (this.groundSampler) {
+      const y = this.groundSampler(x, z);
+      if (y !== null) this.position.y = y;
+    }
+  }
+
   update(dt: number, input: InputState, colliders: AABB[], walls: Wall[]): void {
     // Local axes from heading (matches sin/cos forward convention).
     this.forward.set(Math.sin(this.heading), Math.cos(this.heading));
