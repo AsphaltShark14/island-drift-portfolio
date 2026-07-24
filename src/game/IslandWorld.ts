@@ -13,7 +13,9 @@ import { computeBoundsTree, disposeBoundsTree, acceleratedRaycast } from "three-
 // workable size relative to the car. Larger = roomier roads / more
 // overpass clearance and a proportionally smaller car.
 const ISLAND_SCALE = 0.24;
-const MODEL_URL = "/models/pier-island/pier-island.glb";
+// BASE_URL accounts for deployments served from a subpath (e.g. GitHub Pages
+// project sites at username.github.io/repo-name/).
+const MODEL_URL = `${import.meta.env.BASE_URL}models/pier-island/pier-island.glb`;
 
 export interface IslandWorld {
   /**

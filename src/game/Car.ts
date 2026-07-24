@@ -343,7 +343,7 @@ export class Car {
   private async loadModel(): Promise<void> {
     try {
       const loader = new GLTFLoader();
-      const gltf = await loader.loadAsync("/models/ae86.glb");
+      const gltf = await loader.loadAsync(`${import.meta.env.BASE_URL}models/ae86.glb`);
       const root = gltf.scene;
 
       // Drop any baked camera/light nodes from the export.
