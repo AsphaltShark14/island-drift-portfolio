@@ -45,15 +45,22 @@ export async function createIslandWorld(scene: THREE.Scene): Promise<IslandWorld
   root.updateMatrixWorld(true);
 
   // The glTF mesh has many primitives → GLTFLoader makes many child meshes.
-  // BVH every one and raycast against all of them.
+  // BVH every one and raycast against all of them for ground/wall queries —
+  // except decorative overhead structures (solar-panel parking canopies and
+  // their ceiling underside), which have no gameplay floor of their own and
+  // would otherwise let the car climb their sloped edge onto the roof deck
+  // instead of driving underneath. They still render normally via `root`;
+  // they're just invisible to the driving raycasts.
+  const NON_TRAVERSABLE = /solar panel|panelgen|grid ceiling/i;
   const meshes: THREE.Mesh[] = [];
   root.traverse((o) => {
     const m = o as THREE.Mesh;
-    if (m.isMesh && m.geometry) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (m.geometry as any).computeBoundsTree();
-      meshes.push(m);
-    }
+    if (!m.isMesh || !m.geometry) return;
+    const matName = (m.material as THREE.Material)?.name ?? "";
+    if (NON_TRAVERSABLE.test(matName)) return; // renders via `root`, skipped by raycasts
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (m.geometry as any).computeBoundsTree();
+    meshes.push(m);
   });
   if (meshes.length === 0) throw new Error("Pier Island meshes not found in GLB");
 
